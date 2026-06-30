@@ -836,6 +836,61 @@
     0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
     40%           { transform: scale(1);   opacity: 1; }
   }
+
+  /* ── Walkthrough tour ─────────────────────────────────────────────────────── */
+  .tour-overlay {
+    position: fixed; inset: 0; z-index: 2000; pointer-events: none;
+  }
+  .tour-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+    pointer-events: all;
+  }
+  .tour-spotlight {
+    position: fixed; z-index: 2001; border-radius: 6px; pointer-events: none;
+    outline: 2px solid #38BDF8;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.72);
+  }
+  .tour-card {
+    position: fixed; z-index: 2002;
+    background: #111827; border: 1px solid #1F2937;
+    border-radius: 12px; padding: 24px 24px 20px;
+    width: 320px; max-width: calc(100vw - 32px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+    pointer-events: all;
+  }
+  .tour-card-step {
+    font-size: 10px; letter-spacing: 0.08em; font-weight: 600;
+    color: #38BDF8; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .tour-card h3 {
+    margin: 0 0 10px; font-size: 15px; font-weight: 700;
+    color: #F1F5F9; line-height: 1.3;
+  }
+  .tour-card p {
+    margin: 0 0 20px; font-size: 12.5px; color: #94A3B8;
+    line-height: 1.65;
+  }
+  .tour-card-footer {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tour-dots {
+    display: flex; gap: 5px; flex: 1;
+  }
+  .tour-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #1F2937; transition: background 0.2s;
+  }
+  .tour-dot.active { background: #38BDF8; }
+  .tour-btn {
+    padding: 6px 14px; border-radius: 6px; font-size: 12px;
+    font-weight: 600; cursor: pointer; border: 1px solid #1F2937;
+    background: transparent; color: #6B7280; transition: all 0.15s;
+  }
+  .tour-btn:hover { color: #94A3B8; border-color: #374151; }
+  .tour-btn.primary {
+    background: #38BDF8; border-color: #38BDF8; color: #0B0F19;
+  }
+  .tour-btn.primary:hover { background: #7DD3FC; border-color: #7DD3FC; }
 </style>
 </head>
 <body>
@@ -936,8 +991,9 @@ function calcStats(rows) {
 }
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ site, stats, loading }) {
-  const total = stats ? stats.solarAnomalyCount + stats.windAnomalyCount : 0;
+function KpiCard({ site, stats, loading, primaryVar }) {
+  const isSolar   = primaryVar === 'solar';
+  const anomCount = stats ? (isSolar ? stats.solarAnomalyCount : stats.windAnomalyCount) : 0;
 
   return (
     <div className="kpi-card" style={{ borderTop: `2px solid ${site.color}` }}>
@@ -946,10 +1002,10 @@ function KpiCard({ site, stats, loading }) {
           <div className="kpi-site-name" style={{ color: site.color }}>{site.emoji} {site.label}</div>
           <div style={{ fontSize: 10, color: '#4B5563', marginTop: 1 }}>{site.region}</div>
         </div>
-        {total > 0 && (
+        {anomCount > 0 && (
           <div className="kpi-flag">
             <div className="pulse-ring" style={{ background: '#EF4444' }} />
-            <div className="kpi-badge">⚠ {total} anomalies</div>
+            <div className="kpi-badge">⚠ {anomCount} anomalies</div>
           </div>
         )}
       </div>
@@ -959,22 +1015,43 @@ function KpiCard({ site, stats, loading }) {
       ) : stats ? (
         <div className="kpi-metrics">
           <div className="kpi-primary">
-            <div className="kpi-value" style={{ color: site.color }}>{Math.round(stats.avgSolar)}</div>
-            <div className="kpi-unit">W/m² avg solar</div>
+            <div className="kpi-value" style={{ color: site.color }}>
+              {isSolar ? Math.round(stats.avgSolar) : stats.avgWind.toFixed(1)}
+            </div>
+            <div className="kpi-unit">{isSolar ? 'W/m² avg solar' : 'km/h avg wind'}</div>
           </div>
           <div className="kpi-secondary">
-            <div className="kpi-stat">
-              <div className="kpi-stat-label">Peak Solar</div>
-              <div className="kpi-stat-val">{Math.round(stats.maxSolar)} W/m²</div>
-            </div>
-            <div className="kpi-stat">
-              <div className="kpi-stat-label">Avg Wind</div>
-              <div className="kpi-stat-val">{stats.avgWind.toFixed(1)} km/h</div>
-            </div>
-            <div className="kpi-stat">
-              <div className="kpi-stat-label">Max Gust</div>
-              <div className="kpi-stat-val">{Math.round(stats.maxWind)} km/h</div>
-            </div>
+            {isSolar ? (
+              <>
+                <div className="kpi-stat">
+                  <div className="kpi-stat-label">Peak Solar</div>
+                  <div className="kpi-stat-val">{Math.round(stats.maxSolar)} W/m²</div>
+                </div>
+                <div className="kpi-stat">
+                  <div className="kpi-stat-label">Avg Wind</div>
+                  <div className="kpi-stat-val">{stats.avgWind.toFixed(1)} km/h</div>
+                </div>
+                <div className="kpi-stat">
+                  <div className="kpi-stat-label">Max Gust</div>
+                  <div className="kpi-stat-val">{Math.round(stats.maxWind)} km/h</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="kpi-stat">
+                  <div className="kpi-stat-label">Max Gust</div>
+                  <div className="kpi-stat-val">{Math.round(stats.maxWind)} km/h</div>
+                </div>
+                <div className="kpi-stat">
+                  <div className="kpi-stat-label">Avg Solar</div>
+                  <div className="kpi-stat-val">{Math.round(stats.avgSolar)} W/m²</div>
+                </div>
+                <div className="kpi-stat">
+                  <div className="kpi-stat-label">Peak Solar</div>
+                  <div className="kpi-stat-val">{Math.round(stats.maxSolar)} W/m²</div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : (
@@ -1110,13 +1187,15 @@ function WindRose({ site, rows }) {
 }
 
 // ── Anomaly Table ─────────────────────────────────────────────────────────────
-function AnomalyTable({ allData, activeSites }) {
+function AnomalyTable({ allData, activeSites, primaryVar }) {
+  const isSolar = primaryVar === 'solar';
+
   const flagged = [];
   activeSites.forEach(key => {
     const site = LOCATIONS[key];
     const rows = allData[key];
     if (!rows) return;
-    rows.filter(r => r.solarAnomaly || r.windAnomaly)
+    rows.filter(r => isSolar ? r.solarAnomaly : r.windAnomaly)
         .forEach(r => flagged.push({ site, ...r }));
   });
   flagged.sort((a, b) => b.time - a.time);
@@ -1125,31 +1204,53 @@ function AnomalyTable({ allData, activeSites }) {
     month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
   });
 
+  const label = isSolar ? 'Solar' : 'Wind';
+
   return (
-    <div className="table-panel">
+    <div id="tour-log" className="table-panel">
       <div className="panel-header">
-        <div className="panel-title"><span>⚠</span> Anomaly Log</div>
+        <div className="panel-title"><span>⚠</span> {label} Anomaly Log</div>
         {flagged.length > 0 && <div className="panel-count">{flagged.length} flagged hours</div>}
       </div>
       <div className="table-wrap">
         {flagged.length === 0 ? (
-          <div className="empty-state">No anomalies detected.</div>
+          <div className="empty-state">No {label.toLowerCase()} anomalies detected.</div>
         ) : (
           <table>
             <thead>
-              <tr><th>Site</th><th>Timestamp</th><th>Solar GHI</th><th>Wind</th><th>Flags</th></tr>
+              <tr>
+                <th>Site</th>
+                <th>Timestamp</th>
+                {isSolar ? (
+                  <><th>Solar GHI</th><th>Wind</th></>
+                ) : (
+                  <><th>Wind Speed</th><th>Gusts</th></>
+                )}
+                <th>Flag</th>
+              </tr>
             </thead>
             <tbody>
               {flagged.map((r, i) => (
                 <tr key={i}>
                   <td className="td-site" style={{ color: r.site.color }}>{r.site.emoji} {r.site.label}</td>
                   <td>{fmt(r.time)}</td>
-                  <td>{r.solar != null ? `${Math.round(r.solar)} W/m²` : '—'}</td>
-                  <td>{r.wind  != null ? `${r.wind.toFixed(1)} km/h` : '—'}</td>
+                  {isSolar ? (
+                    <>
+                      <td>{r.solar != null ? `${Math.round(r.solar)} W/m²` : '—'}</td>
+                      <td>{r.wind  != null ? `${r.wind.toFixed(1)} km/h`   : '—'}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{r.wind  != null ? `${r.wind.toFixed(1)} km/h`   : '—'}</td>
+                      <td>{r.gusts != null ? `${Math.round(r.gusts)} km/h` : '—'}</td>
+                    </>
+                  )}
                   <td>
                     <div className="flag-cell">
-                      {r.solarAnomaly && <span className="flag-tag flag-solar">☀ Solar</span>}
-                      {r.windAnomaly  && <span className="flag-tag flag-wind">💨 Wind</span>}
+                      {isSolar
+                        ? <span className="flag-tag flag-solar">☀ Solar</span>
+                        : <span className="flag-tag flag-wind">💨 Wind</span>
+                      }
                     </div>
                   </td>
                 </tr>
@@ -1280,9 +1381,183 @@ function DashboardChatbot() {
           </div>
         </div>
       )}
-      <button className="chatbot-fab" onClick={() => setOpen(o => !o)} title="Helios AI Assistant">
+      <button id="tour-chatbot" className="chatbot-fab" onClick={() => setOpen(o => !o)} title="Helios AI Assistant">
         {open ? '✕' : '💬'}
       </button>
+    </div>
+  );
+}
+
+// ── Walkthrough Tour ──────────────────────────────────────────────────────────
+const TOUR_STEPS = [
+  {
+    id: null,
+    title: 'Welcome to Helios 👋',
+    body: 'This short walkthrough will show you how to use the Solar & Wind Monitoring Dashboard. You can skip it at any time and relaunch it by pressing the ? button in the top bar.',
+    pos: 'center',
+  },
+  {
+    id: 'tour-sites',
+    title: 'Step 1 — Select Sites',
+    body: 'Check or uncheck sites here to include them on the charts. You can view one, two, or all three at once. Each site keeps its own colour throughout the entire dashboard.',
+    pos: 'right',
+  },
+  {
+    id: 'tour-dates',
+    title: 'Step 2 — Date Range',
+    body: 'Set the period you want to explore. The maximum window is 30 days. The pickers are linked — extending one end automatically clamps the other so the window stays within limits.',
+    pos: 'right',
+  },
+  {
+    id: 'tour-anomaly',
+    title: 'Step 3 — Anomaly Detection',
+    body: 'The backend pipeline flags unusual readings using the IQR method (interquartile range). Toggle "Show anomaly markers" to overlay red diamonds on the chart wherever an anomaly was detected.',
+    pos: 'right',
+  },
+  {
+    id: 'tour-opts',
+    title: 'Step 4 — Chart Options',
+    body: 'Choose what the main chart shows: ☀ Solar GHI in W/m², or 💨 Wind Speed in km/h. Toggle the Secondary Overlay to add the other variable on a second axis — great for spotting solar-wind correlations.',
+    pos: 'right',
+  },
+  {
+    id: 'tour-refresh',
+    title: 'Step 5 — Load Data',
+    body: 'After choosing your sites and date range, click ↻ Refresh Data to fetch results from the backend. The button shows a spinner while loading. Data is fetched live from the Flask API.',
+    pos: 'right',
+  },
+  {
+    id: 'tour-kpis',
+    title: 'Step 6 — Summary Cards',
+    body: 'These cards show key statistics for the loaded period — average daytime solar irradiance, peak GHI, average wind speed, and the highest gust recorded. The coloured top border matches each site\'s chart line.',
+    pos: 'bottom',
+  },
+  {
+    id: 'tour-chart',
+    title: 'Step 7 — Hourly Time Series',
+    body: 'The main chart plots your selected variable hour-by-hour. Hover to inspect exact values. Click and drag to zoom into a period, then double-click to zoom back out. Red diamonds mark anomalous hours (when markers are on).',
+    pos: 'top',
+  },
+  {
+    id: 'tour-roses',
+    title: 'Step 8 — Wind Rose',
+    body: 'Wind roses show how often wind blows from each compass direction and how fast. Longer petals mean more frequent wind from that direction. Especially revealing for Wellington, which is dominated by strong Cook Strait westerlies.',
+    pos: 'top',
+  },
+  {
+    id: 'tour-log',
+    title: 'Step 9 — Anomaly Log',
+    body: 'Every hour flagged as anomalous by the IQR pipeline appears here as a table row. Columns show the site, exact timestamp, solar and wind values, and which variables were flagged. The header shows the total count.',
+    pos: 'top',
+  },
+  {
+    id: 'tour-chatbot',
+    title: 'Step 10 — AI Assistant',
+    body: 'Click this button to open the Helios AI chatbot. Ask it anything — "Which site had the highest solar last week?", "Were there wind anomalies recently?", or "Explain the anomaly method." Time-based questions use live database data.',
+    pos: 'left',
+  },
+  {
+    id: null,
+    title: "You're all set! ✅",
+    body: 'Select your sites, pick a date range, and click Refresh Data to get started. The ? button in the top bar will relaunch this tour whenever you need it.',
+    pos: 'center',
+  },
+];
+
+function WalkthroughTour({ onClose }) {
+  const [step, setStep] = useState(0);
+  const [rect, setRect] = useState(null);
+  const current = TOUR_STEPS[step];
+  const total = TOUR_STEPS.length;
+
+  useEffect(() => {
+    if (!current.id) { setRect(null); return; }
+    function measure() {
+      const el = document.getElementById(current.id);
+      if (el) setRect(el.getBoundingClientRect());
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [step]);
+
+  function finish() {
+    try { localStorage.setItem('helios_tour_seen', '1'); } catch (_) {}
+    onClose();
+  }
+  const next = () => step < total - 1 ? setStep(s => s + 1) : finish();
+  const back = () => setStep(s => s - 1);
+
+  // Position the tooltip card relative to the spotlit element
+  function cardStyle() {
+    const W = 320, pad = 16;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    if (!rect || current.pos === 'center') {
+      return { top: '50%', left: '50%', transform: 'translate(-50%,-50%)' };
+    }
+    const { top, bottom, left, right } = rect;
+    if (current.pos === 'right') {
+      return {
+        top: Math.min(Math.max(top, pad), vh - 300),
+        left: Math.min(right + 16, vw - W - pad),
+      };
+    }
+    if (current.pos === 'left') {
+      return {
+        top: Math.min(Math.max(top - 80, pad), vh - 300),
+        left: Math.max(left - W - 16, pad),
+      };
+    }
+    if (current.pos === 'bottom') {
+      return {
+        top: Math.min(bottom + 16, vh - 300),
+        left: Math.min(Math.max(left, pad), vw - W - pad),
+      };
+    }
+    // top
+    return {
+      top: Math.max(top - 260, pad),
+      left: Math.min(Math.max(left, pad), vw - W - pad),
+    };
+  }
+
+  const spotPad = 6;
+  return (
+    <div className="tour-overlay">
+      <div className="tour-backdrop" onClick={() => {}} />
+
+      {rect && (
+        <div className="tour-spotlight" style={{
+          top:    rect.top    - spotPad,
+          left:   rect.left   - spotPad,
+          width:  rect.width  + spotPad * 2,
+          height: rect.height + spotPad * 2,
+        }} />
+      )}
+
+      <div className="tour-card" style={cardStyle()}>
+        {current.id && (
+          <div className="tour-card-step">
+            {step} of {total - 2}
+          </div>
+        )}
+        <h3>{current.title}</h3>
+        <p>{current.body}</p>
+        <div className="tour-card-footer">
+          <div className="tour-dots">
+            {TOUR_STEPS.map((_, i) => (
+              <div key={i} className={`tour-dot ${i === step ? 'active' : ''}`} />
+            ))}
+          </div>
+          <button className="tour-btn" onClick={finish}>Skip</button>
+          {step > 0 && (
+            <button className="tour-btn" onClick={back}>Back</button>
+          )}
+          <button className="tour-btn primary" onClick={next}>
+            {step === total - 1 ? 'Done' : 'Next →'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1299,6 +1574,9 @@ function App() {
   const [loading,       setLoading]       = useState(false);
   const [error,         setError]         = useState(null);
   const [lastFetched,   setLastFetched]   = useState(null);
+  const [showTour,      setShowTour]      = useState(() => {
+    try { return !localStorage.getItem('helios_tour_seen'); } catch (_) { return true; }
+  });
 
   // Compute stats per site from loaded data
   const allStats = {};
@@ -1351,7 +1629,7 @@ function App() {
         </div>
 
         {/* Sites */}
-        <div className="sidebar-section">
+        <div id="tour-sites" className="sidebar-section">
           <div className="sidebar-label">Sites</div>
           {Object.values(LOCATIONS).map(site => (
             <div
@@ -1376,7 +1654,7 @@ function App() {
         </div>
 
         {/* Date Range */}
-        <div className="sidebar-section">
+        <div id="tour-dates" className="sidebar-section">
           <div className="sidebar-label">Date Range</div>
           <div className="date-row">
             <div className="date-field">
@@ -1408,7 +1686,7 @@ function App() {
         </div>
 
         {/* Anomaly */}
-        <div className="sidebar-section">
+        <div id="tour-anomaly" className="sidebar-section">
           <div className="sidebar-label">Anomaly Detection</div>
           <div style={{ fontSize: 11, color: 'var(--muted2)', marginBottom: 10, lineHeight: 1.6 }}>
             Method: <span style={{ color: 'var(--accent)', fontWeight: 600 }}>IQR</span>
@@ -1421,7 +1699,7 @@ function App() {
         </div>
 
         {/* Chart Options */}
-        <div className="sidebar-section">
+        <div id="tour-opts" className="sidebar-section">
           <div className="sidebar-label">Primary Variable</div>
           <div className="var-pills">
             <button
@@ -1438,7 +1716,7 @@ function App() {
         </div>
 
         {/* Refresh */}
-        <div style={{ padding: '12px 16px 16px' }}>
+        <div id="tour-refresh" style={{ padding: '12px 16px 16px' }}>
           <button
             className="fetch-btn"
             onClick={loadData}
@@ -1472,6 +1750,17 @@ function App() {
               );
             })}
           </div>
+          <button
+            onClick={() => setShowTour(true)}
+            title="Relaunch walkthrough"
+            style={{
+              marginLeft: 12, width: 28, height: 28, borderRadius: '50%',
+              border: '1px solid #1F2937', background: 'transparent',
+              color: '#6B7280', fontSize: 13, fontWeight: 700,
+              cursor: 'pointer', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', flexShrink: 0,
+              lineHeight: 1,
+            }}>?</button>
         </div>
 
         {/* Scrollable canvas */}
@@ -1482,19 +1771,20 @@ function App() {
           )}
 
           {/* KPI cards — always show all 3, greyed if not active */}
-          <div className="kpi-row">
+          <div id="tour-kpis" className="kpi-row">
             {Object.values(LOCATIONS).map(site => (
               <KpiCard
                 key={site.key}
                 site={site}
                 stats={allData[site.key] ? allStats[site.key] : null}
                 loading={loading && activeSites.includes(site.key)}
+                primaryVar={primaryVar}
               />
             ))}
           </div>
 
           {/* Time series */}
-          <div className="chart-panel">
+          <div id="tour-chart" className="chart-panel">
             <div className="chart-header">
               <div className="chart-title">
                 <div className="chart-title-icon" />
@@ -1539,9 +1829,9 @@ function App() {
 
           {/* Anomaly table + Wind roses */}
           <div className="bottom-row">
-            <AnomalyTable allData={allData} activeSites={renderedSites} />
+            <AnomalyTable allData={allData} activeSites={renderedSites} primaryVar={primaryVar} />
 
-            <div className="roses-panel">
+            <div id="tour-roses" className="roses-panel">
               <div className="panel-header">
                 <div className="panel-title">🧭 Wind Direction Distribution</div>
               </div>
@@ -1587,6 +1877,8 @@ function App() {
       </div>{/* end .main */}
 
       <DashboardChatbot />
+
+      {showTour && <WalkthroughTour onClose={() => setShowTour(false)} />}
     </div>
   );
 }
