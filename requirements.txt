@@ -3,4 +3,5 @@ flask-cors>=4.0
 pandas>=2.2
 numpy>=1.26
 requests>=2.31
-apscheduler>=3.10
+celery[redis]>=5.3
+redis>=5.0

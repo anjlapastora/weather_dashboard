@@ -198,37 +198,58 @@ def pipeline_runs():
 @api.post("/pipeline/trigger")
 def trigger_pipeline():
     """
-    Manually trigger the ETL pipeline (runs synchronously).
-    Intended for development and manual backfills.
+    Manually dispatch the ETL pipeline as a Celery task (async).
+    Returns immediately with the task ID; the worker runs it in the background.
 
     Body (JSON, all optional):
-        site   (str)  — run one site only; omit for all
-        start  (str)  — YYYY-MM-DD
-        end    (str)  — YYYY-MM-DD
-        method (str)  — 'zscore' | 'iqr' | 'both'
-        z_thresh (float)
+        site     (str)   — run one site only; omit for all
+        start    (str)   — YYYY-MM-DD
+        end      (str)   — YYYY-MM-DD
     """
-    from etl.pipeline import run_site, run_all
-    from datetime import date, timedelta
+    from tasks import run_daily_pipeline, run_site_pipeline
 
-    body = request.get_json(silent=True) or {}
+    body  = request.get_json(silent=True) or {}
     default_start, default_end = _default_range()
 
-    site     = body.get("site")
-    start    = body.get("start", default_start)
-    end      = body.get("end",   default_end)
-    method   = body.get("method",   DEFAULT_METHOD)
-    z_thresh = float(body.get("z_thresh", DEFAULT_Z_THRESHOLD))
+    site  = body.get("site")
+    start = body.get("start", default_start)
+    end   = body.get("end",   default_end)
 
     try:
         if site:
-            result = run_site(site, start, end, method=method, z_thresh=z_thresh)
-            return jsonify({"status": "ok", "results": [result]})
+            task = run_site_pipeline.delay(site, start, end)
         else:
-            results = run_all(start, end, method=method, z_thresh=z_thresh)
-            return jsonify({"status": "ok", "results": results})
+            task = run_daily_pipeline.delay()
+
+        return jsonify({
+            "status":  "queued",
+            "task_id": task.id,
+            "site":    site or "all",
+            "start":   start,
+            "end":     end,
+            "message": "Task queued. Check /pipeline/task/<task_id> for status.",
+        }), 202
     except Exception as exc:
-        return _error(str(exc), 500)
+        return _error(f"Could not queue task: {exc}", 500)
+
+
+@api.get("/pipeline/task/<task_id>")
+def pipeline_task_status(task_id: str):
+    """Check the status of a queued pipeline task."""
+    from celery_app import celery
+    from celery.result import AsyncResult
+
+    result = AsyncResult(task_id, app=celery)
+    response = {
+        "task_id": task_id,
+        "status":  result.status,
+    }
+    if result.ready():
+        if result.successful():
+            response["result"] = result.result
+        else:
+            response["error"] = str(result.result)
+    return jsonify(response)
 
 
 @api.get("/health")

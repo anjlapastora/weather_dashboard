@@ -80,7 +80,11 @@ DAYTIME_THRESHOLD = 10  # W/m²
 DEFAULT_Z_THRESHOLD = 2.5  # σ — used for Z-Score method
 DEFAULT_METHOD = "iqr"  # "zscore" | "iqr"
 
-# ── Pipeline schedule (APScheduler cron) ──────────────────────────────────────
-PIPELINE_CRON_HOUR = 2  # 2 AM local server time
+# ── Pipeline schedule (Celery Beat cron) ─────────────────────────────────────
+PIPELINE_CRON_HOUR = 0    # midnight
 PIPELINE_CRON_MINUTE = 0
-PIPELINE_DAYS_BACK = 30  # how many days of history to fetch each run
+PIPELINE_DAYS_BACK = 30   # how many days of history to fetch each run
+
+# ── Celery / Redis ────────────────────────────────────────────────────────────
+CELERY_BROKER_URL  = os.getenv("CELERY_BROKER_URL",  "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")

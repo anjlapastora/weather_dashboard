@@ -65,6 +65,16 @@ weather_dashboard/
 ### Prerequisites
 
 - Python 3.10+
+- Redis (for Celery task queue)
+
+```bash
+# Install Redis (Ubuntu/Debian)
+sudo apt install redis-server
+sudo systemctl start redis
+
+# macOS
+brew install redis && brew services start redis
+```
 
 ### Installation
 
@@ -81,13 +91,57 @@ pip install -r requirements.txt
 # 1. Create the SQLite database and tables
 python -m db.schema
 
-# 2. Pull 30 days of data for all three sites
+# 2. Pull 30 days of data for all three sites (one-time backfill)
 python -m etl.pipeline
 
 # 3. Start the API server
 python app.py
 # → http://localhost:5000
 ```
+
+### Celery scheduler
+
+The ETL pipeline runs automatically every day at **00:00 UTC** via Celery Beat.
+Open two additional terminals after starting Flask:
+
+```bash
+# Terminal A — Celery worker (executes tasks)
+source venv/bin/activate
+celery -A celery_app worker --loglevel=info
+
+# Terminal B — Celery Beat (fires the schedule)
+source venv/bin/activate
+celery -A celery_app beat --loglevel=info
+```
+
+The Beat scheduler emits the `tasks.run_daily_pipeline` task at midnight UTC every day.
+The worker picks it up, fetches the last 30 days of data from Open-Meteo for all three
+sites, cleans it, flags anomalies, and upserts into the SQLite database.
+
+#### Trigger the pipeline manually
+
+```bash
+# Dispatch an immediate run for all sites (async — returns task ID)
+curl -s -X POST http://localhost:5000/api/pipeline/trigger | python -m json.tool
+
+# Run for a specific site and date range
+curl -s -X POST http://localhost:5000/api/pipeline/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"site": "riyadh", "start": "2026-06-01", "end": "2026-06-30"}' \
+  | python -m json.tool
+
+# Check task status (use task_id from the trigger response)
+curl -s http://localhost:5000/api/pipeline/task/<task_id> | python -m json.tool
+```
+
+#### Schedule configuration
+
+| Setting | Default | Env var override |
+|---------|---------|-----------------|
+| Cron time | `00:00 UTC` | Edit `PIPELINE_CRON_HOUR` / `PIPELINE_CRON_MINUTE` in `config.py` |
+| Broker URL | `redis://localhost:6379/0` | `CELERY_BROKER_URL` |
+| Result backend | `redis://localhost:6379/0` | `CELERY_RESULT_BACKEND` |
+| Days fetched | `30` | Edit `PIPELINE_DAYS_BACK` in `config.py` |
 
 ### API endpoints
 
@@ -100,16 +154,22 @@ python app.py
 | GET | `/api/anomalies?site=riyadh` | Anomaly-flagged rows |
 | GET | `/api/stats?site=riyadh` | Summary statistics |
 | GET | `/api/pipeline/runs` | ETL audit log |
-| POST | `/api/pipeline/trigger` | Manual pipeline trigger |
+| POST | `/api/pipeline/trigger` | Dispatch pipeline task to Celery (async) |
+| GET | `/api/pipeline/task/<id>` | Check queued task status |
 
-### Running the data API tests
+### Running the tests
 
 ```bash
 # from repo root
 source helios-backend/venv/bin/activate
+
+# API + ETL unit tests
 pytest helios-backend/tests/test_etl.py helios-backend/tests/test_api.py -v
 
-# browser end-to-end tests (requires Flask running on :5000)
+# Celery scheduler tests (no live Redis required — uses eager mode)
+pytest helios-backend/tests/test_scheduler.py -v
+
+# Browser end-to-end tests (requires Flask running on :5000)
 pytest helios-backend/tests/test_dashboard_e2e.py -v
 ```
 
