@@ -37,6 +37,14 @@ Answer the question using ONLY the context provided below.
 Be concise and accurate. If the answer is not in the context, say so clearly.
 Do not make up information.
 
+IMPORTANT RULE — Site name clarification:
+Helios monitors exactly three named sites: Riyadh (Saudi Arabia), Wellington (New Zealand), \
+and Manila (Philippines). There are no sites named "Site A", "Site B", or "Site C".
+If the question contains "Site A", "Site B", "Site C", or any similar generic label, \
+do NOT guess which site is meant. Instead, respond ONLY with:
+"Could you clarify which site you mean? Helios monitors Riyadh (Saudi Arabia), \
+Wellington (New Zealand), and Manila (Philippines)."
+
 Context:
 {context}
 
