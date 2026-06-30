@@ -364,6 +364,125 @@ chatbot/tests/test_rag.py::TestDocumentLoading::test_knowledge_dir_has_md_files 
 
 ## Part 3 — Frontend dashboard
 
+### First-time visitor walkthrough
+
+When you open the dashboard for the first time, here is what you are looking at and how to use each part.
+
+---
+
+#### 1. The sidebar (left panel)
+
+The sidebar is your control panel. Everything you change here updates the charts in real time after you click **↻ Refresh Data**.
+
+**Sites**
+Three monitoring locations are listed — 🏜️ Riyadh, 🌬️ Wellington, and 🌧️ Manila. Each has a coloured checkbox next to it. Click a site to toggle it on or off. You can view one, two, or all three sites at the same time. Active sites appear with their checkbox filled in their site colour.
+
+**Date Range**
+Pick the start and end dates for the data you want to see. The maximum window is 90 days. Both pickers are linked — changing the start date automatically adjusts the end date if the window would exceed the limit, and vice versa. Today's date is always selectable as the end date.
+
+**Anomaly Detection**
+This section shows the active method (IQR — interquartile range). Toggle **Show anomaly markers** on to overlay red diamond markers on the chart wherever the pipeline flagged an unusual reading. Toggle it off for a cleaner view.
+
+**Primary Variable**
+Choose what the main chart line shows:
+- ☀ **Solar** — plots Solar GHI (W/m², watts per square metre) on the left axis
+- 💨 **Wind** — plots Wind Speed (km/h) on the left axis
+
+**Secondary overlay**
+When switched on, a second line is added to the chart on its own right-hand axis showing the opposite variable (e.g. if Solar is primary, Wind becomes the overlay, and vice versa). This is useful for spotting correlations — for example, whether cloudy periods that drop solar output also bring higher wind.
+
+**↻ Refresh Data**
+Click this button to fetch data for the selected sites and date range. It loads from the Flask API on port 5000. The button shows a spinner while loading.
+
+---
+
+#### 2. The top bar
+
+The top bar runs across the top of the main canvas and shows which sites are currently loaded as coloured chips (e.g. 🏜️ Riyadh in amber, 🌬️ Wellington in blue, 🌧️ Manila in green). This gives you a quick glance at what is active without looking at the sidebar.
+
+---
+
+#### 3. KPI cards
+
+Below the top bar, three summary cards appear — one for each site regardless of whether it is active (inactive sites are dimmed). Each card shows:
+
+| Stat | Meaning |
+|------|---------|
+| **Avg Solar** | Average daytime Solar GHI in W/m² for the selected period |
+| **Peak Solar** | Highest single hourly Solar GHI reading |
+| **Avg Wind** | Average wind speed in km/h across all hours |
+| **Max Gust** | Highest single wind gust recorded |
+
+The top border of each card is coloured in its site colour so you can match it to the chart lines at a glance.
+
+---
+
+#### 4. Hourly Time Series chart
+
+This is the main chart. It shows the selected variable (Solar or Wind) plotted hour by hour across your chosen date range. Multiple site lines appear together so you can compare trends directly.
+
+- **Hover** over the chart to see the exact reading for each site at that hour.
+- **Click and drag** to zoom into a specific period. Double-click to zoom back out.
+- **Red diamond markers** appear on the line where the IQR pipeline flagged a reading as anomalous (only visible when anomaly markers are turned on).
+- When the **secondary overlay** is on, a second y-axis appears on the right side of the chart for the overlaid variable.
+
+---
+
+#### 5. Wind Direction Distribution (rose charts)
+
+Below the time series, a wind rose chart appears for each active site. A wind rose shows the frequency and strength of wind from each compass direction. The longer a petal, the more often wind came from that direction during the selected period. Petals are colour-banded by wind speed range.
+
+This is particularly revealing for Wellington, which is dominated by strong southwesterly and northerly winds due to its Cook Strait position.
+
+---
+
+#### 6. Anomaly Log
+
+A table at the bottom lists every hour that was flagged as anomalous in the loaded data. Columns show:
+
+| Column | Meaning |
+|--------|---------|
+| **Site** | Which monitoring location |
+| **Timestamp** | The exact hour of the flagged reading |
+| **Solar GHI** | Solar value at that hour |
+| **Wind** | Wind speed and gust at that hour |
+| **Flags** | Which variables were flagged (solar / wind / both) |
+
+The panel header shows the total number of flagged hours. If no anomalies exist in the selected range, the table is empty.
+
+---
+
+#### 7. The AI assistant (💬 button)
+
+A floating **💬** button sits in the bottom-right corner of the page. Click it to open the Helios AI chatbot panel.
+
+The chatbot is powered by a local LLM (via Ollama) and a RAG pipeline grounded in the dashboard's knowledge base. You can ask it questions like:
+
+- *"What anomaly detection method does Helios use?"*
+- *"Were there any anomalous wind readings in the last 7 days?"*
+- *"Which site had the highest average solar radiation last week?"*
+- *"Tell me about Wellington."*
+
+Quick-access suggestion buttons appear at the bottom of the chat panel so you do not have to type from scratch. The coloured dot in the chat header is **green** when the chatbot service is reachable and **red** when it is offline (check that `uvicorn app:app --port 8000` is running in the chatbot directory).
+
+> **Note:** Time-sensitive questions ("last 7 days", "past week", "this month") are answered directly from the live database, not from static documents, so the numbers are always current.
+
+---
+
+#### Quick-start checklist for first-time use
+
+1. Make sure all three services are running (see [Starting all three services together](#starting-all-three-services-together) below)
+2. Open `http://localhost:8080/helios_dashboard.html`
+3. In the sidebar, confirm at least one site is checked
+4. Set your date range (default is the last 30 days)
+5. Click **↻ Refresh Data**
+6. Toggle **Show anomaly markers** on to see flagged readings
+7. Switch the **Primary Variable** between Solar and Wind to explore different views
+8. Enable the **Secondary overlay** to compare both variables at once
+9. Click **💬** to open the AI assistant and ask a question
+
+---
+
 ### Opening the dashboard
 
 The dashboard is a single static HTML file. Open it by serving it over HTTP (required so browser fetch calls work correctly):
