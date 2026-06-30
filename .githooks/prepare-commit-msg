@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+commit_msg_file="${1:-}"
+source_type="${2:-}"
+
+if [[ -z "$commit_msg_file" ]]; then
+  exit 0
+fi
+
+# Respect existing messages (for example from `git commit -m ...`).
+if [[ -s "$commit_msg_file" ]]; then
+  exit 0
+fi
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+if [[ -z "$staged_files" ]]; then
+  exit 0
+fi
+
+mapfile -t files < <(printf '%s
+' "$staged_files" | sed '/^$/d')
+
+mapfile -t groups < <(
+  for file in "${files[@]}"; do
+    if [[ "$file" == */* ]]; then
+      echo "${file%%/*}"
+    else
+      echo "${file##*/}"
+    fi
+  done | sort -u
+)
+
+subject="chore: update staged files"
+
+if [[ ${#groups[@]} -eq 1 ]]; then
+  case "${groups[0]}" in
+    chatbot)
+      subject="feat: update chatbot"
+      ;;
+    helios-backend)
+      subject="feat: update backend"
+      ;;
+    tests)
+      subject="test: update tests"
+      ;;
+    files|README.md|README)
+      subject="docs: update dashboard assets"
+      ;;
+    *)
+      subject="chore: update ${groups[0]}"
+      ;;
+  esac
+elif [[ ${#groups[@]} -eq 2 ]]; then
+  subject="chore: update ${groups[0]} and ${groups[1]}"
+elif [[ ${#groups[@]} -gt 2 ]]; then
+  subject="chore: update multiple areas"
+fi
+
+body=$'Staged files:\n'
+for file in "${files[@]}"; do
+  body+="- ${file}"$'\n'
+done
+
+cat > "$commit_msg_file" <<EOF
+$subject
+
+$body
+EOF

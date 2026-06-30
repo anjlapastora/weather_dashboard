@@ -5,13 +5,20 @@ __pycache__/
 venv/
 .env
 
+# Databases — generated data, not source
+*.db
+*.db-shm
+*.db-wal
+
+# ChromaDB vector index — rebuilt by ingest.py
+chatbot/chroma_db/
+
 # Logs
 *.log
 logs/
 
-# SQLite WAL files
-*.db-shm
-*.db-wal
-
 # OS
 .DS_Store
+
+# Temp / scratch files
+$SCRATCHPAD/
