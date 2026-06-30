@@ -552,6 +552,26 @@ The floating 💬 button in the bottom-right corner is the AI assistant. The sta
 
 [Open-Meteo Archive API](https://open-meteo.com) · Free · No API key required · CC BY 4.0
 
+## Why IQR was chosen for anomaly detection
+
+Solar radiation and wind speed behave very differently, so the anomaly detection method had to work for both without being tuned separately for each.
+
+Z-Score flags a value as unusual based on how many standard deviations it sits from the average, but that only works well when the data follows a normal, bell-shaped curve. Solar radiation during the day comes close to that shape, so Z-Score is fine there. Wind speed doesn't: most hours are calm-to-moderate, with occasional sharp gusts creating a long tail toward high values. Applying a normal-distribution method to that kind of data backfires in two ways. In a windy site like Wellington, the high average and wide spread make a real, extreme gust look statistically normal. In a calm site like Riyadh, the opposite happens, a fairly ordinary gust looks like a rare event simply because the typical range is so narrow there.
+
+IQR avoids this problem entirely. Instead of using the average, it looks at where the middle 50% of the data sits (between the 25th and 75th percentile) and flags anything that falls well outside that range. Since it never relies on the mean, it isn't thrown off by skewed data or by the outliers it's trying to catch. That made it the simpler, more reliable choice for both variables across all three sites, instead of running two different detection methods.
+
+
+## Why Riyadh, Wellington, and Manila
+
+These three sites were chosen specifically because their weather patterns are about as different as you can get, which puts the pipeline and the anomaly detection to a real test instead of just working on similar, easy data.
+
+Riyadh, Saudi Arabia is a hot desert climate, consistently strong, predictable sunlight with very little cloud cover most of the year, and generally low, calm wind. It represents the "best case" solar site, where solar output should be high and steady, and any sudden drop is meaningful.
+
+Wellington, New Zealand is the opposite case for wind, it's one of the windiest cities in the world due to its location between two land masses that funnel strong, frequent gusts through Cook Strait. Its solar radiation is also far less consistent, since cloud cover and storms are common. This site stress-tests the wind side of the pipeline far more than Riyadh ever would.
+
+Manila, Philippines is tropical and monsoonal, high humidity, frequent rain, and heavy cloud cover for large parts of the year, which suppresses solar radiation even during the day. Wind is moderate but can spike sharply during storms or typhoon season, which are common in that region.
+
+Together, these three sites cover a desert (high solar, low wind), a stormy coastal city (low-to-moderate solar, high wind), and a tropical monsoon climate (suppressed solar, occasional wind spikes), so the system has to handle very different "normal" ranges for each site rather than relying on one global average for what counts as typical weather.
 
 ## Notes for future use
 
