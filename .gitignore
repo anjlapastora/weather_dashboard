@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.env
+
+# Logs
+*.log
+logs/
+
+# SQLite WAL files
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
