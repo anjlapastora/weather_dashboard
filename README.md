@@ -2,14 +2,21 @@
 
 Full-stack solar and wind monitoring dashboard with an AI chatbot assistant.
 
+![Helios Dashboard](files/dashboard-preview.png)
+
 ---
 
 ## Repository layout
 
 ```
 weather_dashboard/
-├── files/
-│   └── helios_dashboard.html   ← single-file React + Plotly frontend
+├── helios-frontend/            ← React + Plotly frontend
+│   ├── index.html
+│   ├── styles/
+│   │   └── main.css
+│   ├── js/
+│   │   └── app.js
+│   └── favicon/
 │
 ├── helios-backend/             ← Flask data API + ETL pipeline
 │   ├── app.py
@@ -56,7 +63,7 @@ weather_dashboard/
 |---------|------|-------------|
 | Flask data API | **5000** | Serves cleaned solar/wind data from SQLite |
 | Chatbot RAG API | **8000** | AI Q&A backed by LangChain + ChromaDB + Ollama |
-| Static dev server | any | Serves `helios_dashboard.html` during development |
+| Static dev server | any | Serves `helios-frontend/index.html` during development |
 
 ---
 
@@ -472,7 +479,7 @@ Quick-access suggestion buttons appear at the bottom of the chat panel so you do
 #### Quick-start checklist for first-time use
 
 1. Make sure all three services are running (see [Starting all three services together](#starting-all-three-services-together) below)
-2. Open `http://localhost:8080/helios_dashboard.html`
+2. Open `http://localhost:8080`
 3. In the sidebar, confirm at least one site is checked
 4. Set your date range (default is the last 30 days)
 5. Click **↻ Refresh Data**
@@ -485,16 +492,16 @@ Quick-access suggestion buttons appear at the bottom of the chat panel so you do
 
 ### Opening the dashboard
 
-The dashboard is a single static HTML file. Open it by serving it over HTTP (required so browser fetch calls work correctly):
+Serve the `helios-frontend/` folder over HTTP (required so browser fetch calls work correctly):
 
 ```bash
 # Option A — Python built-in server
-cd files
+cd helios-frontend
 python3 -m http.server 8080
-# → open http://localhost:8080/helios_dashboard.html
+# → open http://localhost:8080
 
 # Option B — Any static server
-npx serve files/
+npx serve helios-frontend/
 ```
 
 ### Starting all three services together
@@ -512,7 +519,7 @@ cd helios-backend && source venv/bin/activate && python app.py
 cd chatbot && source venv/bin/activate && uvicorn app:app --port 8000
 ```
 
-Then open `http://localhost:8080/helios_dashboard.html`.
+Then open `http://localhost:8080`.
 
 The floating 💬 button in the bottom-right corner is the AI assistant. The status dot in the chat header is green when the chatbot service is reachable, red when it's offline.
 
