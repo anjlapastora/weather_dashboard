@@ -6,6 +6,12 @@ Full-stack solar and wind monitoring dashboard with an AI chatbot assistant.
 
 ---
 
+## System architecture
+
+![Helios System Architecture](files/helios_architecture_with_celery.svg)
+
+---
+
 ## Repository layout
 
 ```
