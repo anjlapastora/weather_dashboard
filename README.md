@@ -421,16 +421,57 @@ The floating 💬 button in the bottom-right corner is the AI assistant. The sta
 [Open-Meteo Archive API](https://open-meteo.com) · Free · No API key required · CC BY 4.0
 
 
-## Notes in the future use
+## Notes for future use
 
-There will be a chance that fetching of data every single day for 3 different sites will choke the database. Thus, we may need some methdologies in order to enhance the speed of the database:
-1. Drop raw_observations entirely — saves ~559 KB (43% of the DB)
-It's written by upsert_raw() and never read by any API route. It exists as an audit copy, but Open-Meteo is always available to re-fetch. Dropping the table and its two indexes is by far the biggest single win.
+### Scheduler — remember to run the Celery servers
 
-2. Drop internal-only columns from cleaned_observations — saves ~100 KB
-solar_zscore, wind_zscore, solar_iqr_flag, wind_iqr_flag are ETL scratch values. query_cleaned() returns c.* which pulls them to the frontend, which ignores them. Only solar_anomaly / wind_anomaly are actually used. Removing those 4 columns cuts ~32 bytes × 4,248 rows.
+The Flask API (`python app.py`) does **not** pull data on its own. The daily 00:00 UTC
+pipeline only runs when two extra processes are running alongside Flask:
 
-3. Use a rolling retention window — controls long-term growth
-At 72 rows/day the DB grows ~2.5 MB/year in data + indexes. A simple DELETE FROM cleaned_observations WHERE observed_at < date('now', '-365 days') run at pipeline time keeps size permanently bounded without losing meaningful historical range for the dashboard.
+```bash
+# Must be kept alive alongside the API server
 
-The two structural changes (no raw table, fewer columns) would require migrating the existing data — recreating the table, copying rows, dropping the old one. Worth doing if you plan to run this for months; at 1.3 MB today it's not urgent.
+# Celery worker — executes the pipeline task when triggered
+celery -A celery_app worker --loglevel=info
+
+# Celery Beat — fires the scheduled task every day at 00:00 UTC
+celery -A celery_app beat --loglevel=info
+```
+
+If either process is stopped, data will stop being fetched until it is restarted.
+To verify the schedule is active, check the Beat terminal for a line like:
+
+```
+Scheduler: Sending due task daily-etl-pipeline (tasks.run_daily_pipeline)
+```
+
+You can also trigger a manual run at any time without waiting for midnight:
+
+```bash
+curl -s -X POST http://localhost:5000/api/pipeline/trigger | python -m json.tool
+```
+
+---
+
+### Database size — potential optimisations
+
+Daily fetching for 3 sites produces ~72 rows/day. If the database grows too large,
+consider the following approaches:
+
+1. **Drop `raw_observations` entirely** — saves ~559 KB (43% of the DB).
+   It is written by `upsert_raw()` but never read by any API route. It exists as an
+   audit copy; Open-Meteo is always available to re-fetch. Dropping the table and its
+   two indexes is the biggest single win.
+
+2. **Drop internal-only columns from `cleaned_observations`** — saves ~100 KB.
+   `solar_zscore`, `wind_zscore`, `solar_iqr_flag`, `wind_iqr_flag` are ETL scratch
+   values that `query_cleaned()` pulls to the frontend, which ignores them. Only
+   `solar_anomaly` / `wind_anomaly` are actually consumed. Removing the 4 columns cuts
+   ~32 bytes × number of rows.
+
+3. **Use a rolling retention window** — controls long-term growth.
+   At 72 rows/day the DB grows ~2.5 MB/year. A simple purge run inside the pipeline:
+   ```sql
+   DELETE FROM cleaned_observations WHERE observed_at < date('now', '-365 days');
+   ```
+   keeps size permanently bounded without losing meaningful history for the dashboard.

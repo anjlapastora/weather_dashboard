@@ -281,6 +281,241 @@ class TestRebuildIndex:
             mock_build.assert_called_once()
 
 
+# ── Live DB context ───────────────────────────────────────────────────────────
+
+class TestParseTimeWindow:
+    """Unit tests for the time-phrase parser in db_context."""
+
+    def _parse(self, q: str):
+        from db_context import parse_time_window
+        return parse_time_window(q)
+
+    def test_last_n_days(self):
+        assert self._parse("anomalies in the last 7 days") == 7
+
+    def test_past_n_days(self):
+        assert self._parse("readings past 14 days") == 14
+
+    def test_last_week(self):
+        assert self._parse("What happened last week?") == 7
+
+    def test_past_week(self):
+        assert self._parse("any issues past week?") == 7
+
+    def test_this_week(self):
+        assert self._parse("results this week") == 7
+
+    def test_last_month(self):
+        assert self._parse("Compare sites for the last month") == 30
+
+    def test_past_month(self):
+        assert self._parse("average solar past month") == 30
+
+    def test_last_n_weeks(self):
+        assert self._parse("last 2 weeks data") == 14
+
+    def test_yesterday(self):
+        assert self._parse("what happened yesterday?") == 1
+
+    def test_recent(self):
+        assert self._parse("any recent anomalies?") == 7
+
+    def test_recently(self):
+        assert self._parse("has it changed recently?") == 7
+
+    def test_no_time_phrase_returns_none(self):
+        assert self._parse("What is Helios?") is None
+
+    def test_general_wind_question_returns_none(self):
+        assert self._parse("tell me about wind anomaly detection") is None
+
+    def test_case_insensitive(self):
+        assert self._parse("Last Week data") == 7
+
+
+class TestGetLiveContext:
+    """Tests for get_live_context() with a minimal in-memory SQLite database."""
+
+    @pytest.fixture
+    def helios_db(self, tmp_path):
+        """Seed a minimal helios.db with one site and a few observations."""
+        import sqlite3
+        from datetime import date, timedelta
+
+        db = tmp_path / "helios.db"
+        con = sqlite3.connect(str(db))
+        con.executescript("""
+            CREATE TABLE sites (
+                id INTEGER PRIMARY KEY, key TEXT, label TEXT, region TEXT
+            );
+            CREATE TABLE cleaned_observations (
+                id            INTEGER PRIMARY KEY,
+                site_id       INTEGER,
+                observed_at   TEXT,
+                solar_ghi     REAL,
+                solar_direct  REAL,
+                wind_speed    REAL,
+                wind_gusts    REAL,
+                wind_direction REAL,
+                solar_zscore  REAL,
+                wind_zscore   REAL,
+                solar_iqr_flag INTEGER DEFAULT 0,
+                wind_iqr_flag  INTEGER DEFAULT 0,
+                solar_anomaly  INTEGER DEFAULT 0,
+                wind_anomaly   INTEGER DEFAULT 0,
+                is_daytime     INTEGER DEFAULT 0,
+                quality_flag   TEXT    DEFAULT 'ok'
+            );
+            INSERT INTO sites VALUES (1, 'wellington', 'Wellington', 'New Zealand');
+            INSERT INTO sites VALUES (2, 'riyadh',    'Riyadh',     'Saudi Arabia');
+        """)
+        today     = date.today()
+        yesterday = str(today - timedelta(days=1))
+
+        # 2 wind IQR anomalies for Wellington
+        # Columns: id, site_id, observed_at, solar_ghi, solar_direct,
+        #          wind_speed, wind_gusts, wind_direction, solar_zscore, wind_zscore,
+        #          solar_iqr_flag, wind_iqr_flag, solar_anomaly, wind_anomaly, is_daytime, quality_flag
+        con.execute(
+            "INSERT INTO cleaned_observations VALUES (1,1,?,NULL,NULL,70.0,140.0,NULL,NULL,NULL,0,1,0,1,0,'ok')",
+            (yesterday + " 13:00",),
+        )
+        con.execute(
+            "INSERT INTO cleaned_observations VALUES (2,1,?,NULL,NULL,72.0,145.0,NULL,NULL,NULL,0,1,0,1,0,'ok')",
+            (yesterday + " 14:00",),
+        )
+        # Normal daytime solar reading for Riyadh
+        con.execute(
+            "INSERT INTO cleaned_observations VALUES (3,2,?,900.0,850.0,8.0,20.0,NULL,NULL,NULL,0,0,0,0,1,'ok')",
+            (yesterday + " 10:00",),
+        )
+        con.commit()
+        con.close()
+        return db
+
+    def test_returns_none_if_db_missing(self, tmp_path):
+        from db_context import get_live_context
+        result = get_live_context("last 7 days wind anomalies", str(tmp_path / "nope.db"))
+        assert result is None
+
+    def test_returns_none_if_no_time_phrase(self, helios_db):
+        from db_context import get_live_context
+        result = get_live_context("What is Helios?", str(helios_db))
+        assert result is None
+
+    def test_returns_string_for_wind_query(self, helios_db):
+        from db_context import get_live_context
+        result = get_live_context("wind anomalies last 7 days", str(helios_db))
+        assert result is not None
+        assert isinstance(result, str)
+        assert "Wellington" in result
+
+    def test_returns_string_for_solar_query(self, helios_db):
+        from db_context import get_live_context
+        result = get_live_context("solar radiation past week", str(helios_db))
+        assert result is not None
+        assert "Riyadh" in result
+
+    def test_returns_string_for_comparison_query(self, helios_db):
+        from db_context import get_live_context
+        result = get_live_context("compare all sites last month", str(helios_db))
+        assert result is not None
+        assert "Wellington" in result
+        assert "Riyadh" in result
+
+    def test_live_context_includes_date_range(self, helios_db):
+        from db_context import get_live_context
+        from datetime import date
+        result = get_live_context("wind anomalies last 7 days", str(helios_db))
+        assert str(date.today()) in result
+
+    def test_anomaly_rows_appear_in_output(self, helios_db):
+        from db_context import get_live_context
+        result = get_live_context("wind anomalies last 7 days", str(helios_db))
+        # The two seeded anomaly rows should be visible
+        assert "70.0 km/h" in result or "72.0 km/h" in result
+
+    def test_no_anomalies_returns_none_detected_message(self, tmp_path):
+        """When the DB has no anomalies, the function still returns context."""
+        import sqlite3
+        db = tmp_path / "empty.db"
+        con = sqlite3.connect(str(db))
+        con.executescript("""
+            CREATE TABLE sites (id INTEGER PRIMARY KEY, key TEXT, label TEXT, region TEXT);
+            CREATE TABLE cleaned_observations (
+                id             INTEGER PRIMARY KEY,
+                site_id        INTEGER,
+                observed_at    TEXT,
+                solar_ghi      REAL,
+                solar_direct   REAL,
+                wind_speed     REAL,
+                wind_gusts     REAL,
+                wind_direction REAL,
+                solar_zscore   REAL,
+                wind_zscore    REAL,
+                solar_iqr_flag INTEGER DEFAULT 0,
+                wind_iqr_flag  INTEGER DEFAULT 0,
+                solar_anomaly  INTEGER DEFAULT 0,
+                wind_anomaly   INTEGER DEFAULT 0,
+                is_daytime     INTEGER DEFAULT 0,
+                quality_flag   TEXT    DEFAULT 'ok'
+            );
+            INSERT INTO sites VALUES (1, 'riyadh', 'Riyadh', 'Saudi Arabia');
+        """)
+        con.commit()
+        con.close()
+        from db_context import get_live_context
+        result = get_live_context("wind anomalies last 7 days", str(db))
+        assert result is not None
+        assert "none detected" in result.lower()
+
+
+class TestDynamicQueryPath:
+    """Tests that rag.query() uses live DB context for time-sensitive questions."""
+
+    def test_time_sensitive_query_uses_live_context(self, test_settings):
+        rag = _make_rag(test_settings)
+        with patch("rag.get_live_context", return_value="## Live\nWellington: 2 anomalies") as mock_live:
+            with patch.object(rag, "_answer_with_context", return_value="Wellington had 2 anomalies."):
+                reply, sources = rag.query("wind anomalies last 7 days?")
+
+        mock_live.assert_called_once_with("wind anomalies last 7 days?", str(test_settings.db_path))
+        assert reply == "Wellington had 2 anomalies."
+        assert "live_database" in sources
+
+    def test_static_query_bypasses_live_context(self, test_settings):
+        rag = _make_rag(test_settings)
+        with patch("rag.get_live_context", return_value=None) as mock_live:
+            rag.query("What anomaly method does Helios use?")
+
+        mock_live.assert_called_once()
+        rag.chain.invoke.assert_called_once_with("What anomaly method does Helios use?")
+
+    def test_live_database_appears_first_in_sources(self, test_settings):
+        rag = _make_rag(test_settings)
+        with patch("rag.get_live_context", return_value="## Live data"):
+            with patch.object(rag, "_answer_with_context", return_value="Answer."):
+                _, sources = rag.query("anomalies last week?")
+        assert sources[0] == "live_database"
+
+    def test_chain_not_called_on_dynamic_path(self, test_settings):
+        rag = _make_rag(test_settings)
+        with patch("rag.get_live_context", return_value="## Live data"):
+            with patch.object(rag, "_answer_with_context", return_value="Answer."):
+                rag.query("anomalies last 7 days?")
+        rag.chain.invoke.assert_not_called()
+
+    def test_answer_with_context_called_on_dynamic_path(self, test_settings):
+        rag = _make_rag(test_settings)
+        with patch("rag.get_live_context", return_value="## Live data"):
+            with patch.object(rag, "_answer_with_context", return_value="Answer.") as mock_ans:
+                rag.query("wind anomalies last 7 days?")
+        mock_ans.assert_called_once()
+        context_arg, question_arg = mock_ans.call_args[0]
+        assert "## Live data" in context_arg
+        assert question_arg == "wind anomalies last 7 days?"
+
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 class TestSettings:

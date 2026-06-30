@@ -70,6 +70,8 @@ def test_settings(tmp_path):
         chroma_dir=tmp_path / "chroma_db",
         embedding_model="all-MiniLM-L6-v2",
         llm_model="llama3.2",
+        # Point at a non-existent DB so tests never trigger live queries
+        db_path=tmp_path / "no_db.db",
     )
 
 

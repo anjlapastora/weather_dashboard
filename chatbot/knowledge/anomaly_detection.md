@@ -70,3 +70,6 @@ When `method = 'both'`, a row is flagged as anomalous if **either** IQR or Z-sco
 - A **solar anomaly** in the middle of the day at Riyadh could indicate a sudden dust storm (GHI drop), a sensor issue, or an unusual cloud incursion.
 - A **wind anomaly** at Wellington is more common and often corresponds to Cook Strait gale events.
 - A **wind anomaly** at Manila during June–November often coincides with tropical cyclone activity.
+
+
+

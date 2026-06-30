@@ -26,6 +26,7 @@ from langchain_ollama import OllamaLLM
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config import Settings, settings as default_settings
+from db_context import get_live_context
 
 log = logging.getLogger(__name__)
 
@@ -91,19 +92,60 @@ class HeliosRAG:
         """
         Run a RAG query.
 
+        For time-sensitive questions ("last 7 days", "past week", …) the DB is
+        queried live and the results are injected as the highest-priority context
+        before the LLM call.  All other questions use the pre-built LCEL chain
+        against the static knowledge documents.
+
         Returns:
-            (reply, sources) where sources is a sorted list of unique knowledge
-            file names that contributed to the answer.
+            (reply, sources) — sources lists the knowledge file names (and
+            "live_database" when live DB data was used).
         """
-        result = self.chain.invoke(question)
-        reply = result.get("answer", "").strip()
-        source_docs: list[Document] = result.get("context", [])
-        sources = sorted({
+        live_context = get_live_context(question, str(self.cfg.db_path))
+
+        if live_context is None:
+            # ── Static path ───────────────────────────────────────────────────
+            result = self.chain.invoke(question)
+            reply = result.get("answer", "").strip()
+            source_docs: list[Document] = result.get("context", [])
+            sources = sorted({
+                Path(doc.metadata.get("source", "")).name
+                for doc in source_docs
+                if doc.metadata.get("source")
+            })
+            return reply, sources
+
+        # ── Dynamic path: live DB data + static retrieval ─────────────────────
+        retriever = self.vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": self.cfg.top_k},
+        )
+        static_docs = retriever.invoke(question)
+
+        # Live data goes first so the LLM prioritises current figures
+        live_doc = Document(
+            page_content=live_context,
+            metadata={"source": "live_database"},
+        )
+        context_str = _format_docs([live_doc] + static_docs)
+        answer = self._answer_with_context(context_str, question)
+
+        static_sources = sorted({
             Path(doc.metadata.get("source", "")).name
-            for doc in source_docs
+            for doc in static_docs
             if doc.metadata.get("source")
         })
-        return reply, sources
+        return answer, ["live_database"] + static_sources
+
+    def _answer_with_context(self, context_str: str, question: str) -> str:
+        """Format pre-assembled context + question and call the LLM directly."""
+        prompt = PromptTemplate(
+            input_variables=["context", "question"],
+            template=_PROMPT_TEMPLATE,
+        )
+        return (prompt | self.llm | StrOutputParser()).invoke(
+            {"context": context_str, "question": question}
+        ).strip()
 
     def rebuild_index(self) -> int:
         """

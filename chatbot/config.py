@@ -74,6 +74,12 @@ class Settings(BaseSettings):
         description="Overlap between consecutive chunks.",
     )
 
+    # ── Live database (for time-sensitive queries) ────────────────────────────
+    db_path: Path = Field(
+        default=CHATBOT_DIR.parent / "helios-backend" / "db" / "helios.db",
+        description="Path to the Helios SQLite database used for live context queries.",
+    )
+
     # ── FastAPI ───────────────────────────────────────────────────────────────
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000, ge=1024, le=65535)
